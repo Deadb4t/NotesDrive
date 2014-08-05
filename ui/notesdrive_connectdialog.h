@@ -1,6 +1,6 @@
 /*
- * <one line to give the program's name and a brief idea of what it does.>
- * Copyright (C) 2014  <copyright holder> <email>
+ * NotesDrive: Encrypted remote note storage.
+ * Copyright (C) 2014  Deadb4t Deadb4t@googlemail.com
  * 
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by

@@ -1,3 +1,5 @@
+Cmake_minimum_required(VERSION 3.0)
+
 project(notesdrive)
 
 add_executable(notesdrive encryption/rsa-encryption.cpp ui/notesdrive_connectdialog.cpp ui/notesdrive_mainframe.cpp ui/notesdrive_app.cpp main.cpp)

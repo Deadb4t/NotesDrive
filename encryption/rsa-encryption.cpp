@@ -26,11 +26,14 @@
 #include <osrng.h>
 #include <rsa.h>
 #include <files.h>
+#include <sha3.h>
+#include <pssr.h>
+#include <hex.h>
 
 using namespace std;
 using namespace CryptoPP;
 
-std::string Encryption::RSAEncrypt(RSAKeyPair keyPair, std::string plainText)
+std::string RSAEncryption::RSAEncrypt(RSAKeyPair keyPair, std::string plainText)
 {
     string cipherText;
     AutoSeededRandomPool rng;
@@ -40,7 +43,7 @@ std::string Encryption::RSAEncrypt(RSAKeyPair keyPair, std::string plainText)
                                  );
     return cipherText;
 }
-std::string Encryption::RSADecrypt(RSAKeyPair keyPair, std::string cipherText)
+std::string RSAEncryption::RSADecrypt(RSAKeyPair keyPair, std::string cipherText)
 {
     string plainText;
     AutoSeededRandomPool rng;
@@ -51,7 +54,43 @@ std::string Encryption::RSADecrypt(RSAKeyPair keyPair, std::string cipherText)
     return plainText;
 }
 
-RSAKeyPair Encryption::RSAGenerateKeys()
+string RSAEncryption::SignString(RSAKeyPair keyPair, std::string plainText)
+{
+    AutoSeededRandomPool rng;
+    RSASS<PSS, SHA3_512>::Signer signer(keyPair.PrivateKey);
+    string signature;
+    StringSource ss1(plainText, true, 
+        new SignerFilter(rng, signer,
+            new StringSink(signature)
+        )
+    );
+    return signature;
+}
+
+bool RSAEncryption::VerifySignature(RSAKeyPair keyPair, string plainText, string signature)
+{
+    string recovered;
+    RSASS<PSS, SHA3_512>::Verifier verifier(keyPair.PublicKey);
+    try
+    {
+        StringSource ss2(plainText+signature, true,
+            new SignatureVerificationFilter(
+                verifier,
+                new StringSink(recovered),
+                SignatureVerificationFilter::THROW_EXCEPTION |
+                SignatureVerificationFilter::PUT_MESSAGE
+            )
+        );
+        return true;
+    }
+    catch(std::exception &e)
+    {
+        cout << e.what() << endl;
+        return false;
+    }
+}
+
+RSAKeyPair RSAEncryption::GenerateKeys()
 {
     RSAKeyPair keyPair;
     AutoSeededRandomPool rng;
@@ -59,9 +98,10 @@ RSAKeyPair Encryption::RSAGenerateKeys()
     params.GenerateRandomWithKeySize(rng, 4096);
     keyPair.PrivateKey = RSA::PrivateKey(params);
     keyPair.PublicKey = RSA::PublicKey(params);
+    return keyPair;
 }
 
-bool Encryption::SaveKeys(RSAKeyPair keyPair, 
+bool RSAEncryption::SaveKeys(RSAKeyPair keyPair, 
                           string privateKeyFileName,
                           string publicKeyFileName)
 {
@@ -76,7 +116,7 @@ bool Encryption::SaveKeys(RSAKeyPair keyPair,
         return false;
     }
 }
-bool Encryption::SavePrivateKey(RSA::PrivateKey key, string fileName)
+bool RSAEncryption::SavePrivateKey(RSA::PrivateKey key, string fileName)
 {
     try
     {
@@ -93,7 +133,7 @@ bool Encryption::SavePrivateKey(RSA::PrivateKey key, string fileName)
         return false;
     }
 }
-bool Encryption::SavePublicKey(RSA::PublicKey key, string fileName)
+bool RSAEncryption::SavePublicKey(RSA::PublicKey key, string fileName)
 {
     try
     {
@@ -111,7 +151,7 @@ bool Encryption::SavePublicKey(RSA::PublicKey key, string fileName)
     }
 }
 
-RSAKeyPair Encryption::LoadKeys(string privateKeyFileName, string publicKeyFileName)
+RSAKeyPair RSAEncryption::LoadKeys(string privateKeyFileName, string publicKeyFileName)
 {
     RSAKeyPair keyPair;
     keyPair.Loaded = true;
@@ -124,7 +164,7 @@ RSAKeyPair Encryption::LoadKeys(string privateKeyFileName, string publicKeyFileN
     }
     return keyPair;
 }
-RSAKeyPair Encryption::LoadPrivateKey(RSAKeyPair keyPair, string fileName)
+RSAKeyPair RSAEncryption::LoadPrivateKey(RSAKeyPair keyPair, string fileName)
 {
     try
     {
@@ -142,7 +182,7 @@ RSAKeyPair Encryption::LoadPrivateKey(RSAKeyPair keyPair, string fileName)
         cout << "Error loading private key: " << e.what() << endl;
     }
 }
-RSAKeyPair Encryption::LoadPublicKey(RSAKeyPair keyPair, string fileName)
+RSAKeyPair RSAEncryption::LoadPublicKey(RSAKeyPair keyPair, string fileName)
 {
     try
     {
@@ -160,7 +200,7 @@ RSAKeyPair Encryption::LoadPublicKey(RSAKeyPair keyPair, string fileName)
         cout << "Error locading public key: " << e.what() << endl;
     }
 }
-RSAKeyPair Encryption::ValidateKeyPair(RSAKeyPair keyPair)
+RSAKeyPair RSAEncryption::ValidateKeyPair(RSAKeyPair keyPair)
 {
     AutoSeededRandomPool rng;
     keyPair.Validated = true;

@@ -32,28 +32,31 @@ struct RSAKeyPair
     CryptoPP::RSA::PublicKey PublicKey;
 };
 
-class Encryption
+class RSAEncryption
 {
     public:
-        std::string RSAEncrypt(RSAKeyPair keyPair, std::string plainText);
-        std::string RSADecrypt(RSAKeyPair keyPair, std::string cipherText);
+        static std::string RSAEncrypt(RSAKeyPair keyPair, std::string plainText);
+        static std::string RSADecrypt(RSAKeyPair keyPair, std::string cipherText);
         
-        RSAKeyPair RSAGenerateKeys();
+        static std::string SignString(RSAKeyPair keyPair, std::string plainText);
+        static bool VerifySignature(RSAKeyPair keyPair, std::string plainText, std::string signature);
         
-        bool SaveKeys(RSAKeyPair keyPair, 
+        static RSAKeyPair GenerateKeys();
+        
+        static bool SaveKeys(RSAKeyPair keyPair, 
                                   std::string privateKeyFileName = "RSA-Private.key",
                                   std::string publicKeyFileName = "RSA-Public.key");
         
-        RSAKeyPair LoadKeys(std::string privateKeyFileName = "RSA-Private.key",
+        static RSAKeyPair LoadKeys(std::string privateKeyFileName = "RSA-Private.key",
                             std::string publicKeyFileName = "RSA-Public.key");
         
     private:
-        bool SavePrivateKey(CryptoPP::RSA::PrivateKey key, std::string fileName);
-        bool SavePublicKey(CryptoPP::RSA::PublicKey key, std::string fileName);
+        static bool SavePrivateKey(CryptoPP::RSA::PrivateKey key, std::string fileName);
+        static bool SavePublicKey(CryptoPP::RSA::PublicKey key, std::string fileName);
         
-        RSAKeyPair LoadPrivateKey(RSAKeyPair keyPair, std::string fileName);
-        RSAKeyPair LoadPublicKey(RSAKeyPair keyPair, std::string fileName);
-        RSAKeyPair ValidateKeyPair(RSAKeyPair keyPair);
+        static RSAKeyPair LoadPrivateKey(RSAKeyPair keyPair, std::string fileName);
+        static RSAKeyPair LoadPublicKey(RSAKeyPair keyPair, std::string fileName);
+        static RSAKeyPair ValidateKeyPair(RSAKeyPair keyPair);
 };
 
 #endif // ENCRYPTION_H

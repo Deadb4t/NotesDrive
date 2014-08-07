@@ -2,7 +2,7 @@ Cmake_minimum_required(VERSION 3.0)
 
 project(notesdrive)
 
-add_executable(notesdrive encryption/rsa-encryption.cpp ui/notesdrive_connectdialog.cpp ui/notesdrive_mainframe.cpp ui/notesdrive_app.cpp main.cpp)
+add_executable(notesdrive networking/networking.cpp encryption/rsa-encryption.cpp ui/notesdrive_connectdialog.cpp ui/notesdrive_mainframe.cpp ui/notesdrive_app.cpp main.cpp)
 
 install(TARGETS notesdrive RUNTIME DESTINATION bin)
 
@@ -19,7 +19,7 @@ ELSE(wxWidgets_FOUND)
     MESSAGE("wxWidgets not found!")
 ENDIF(wxWidgets_FOUND)
 
-FIND_PACKAGE(Boost 1.55 COMPONENTS system thread chrono filesystem REQUIRED)
+FIND_PACKAGE(Boost 1.55 COMPONENTS system thread chrono filesystem date_time REQUIRED)
 IF (Boost_FOUND)
     INCLUDE_DIRECTORIES(${Boost_INCLUDE_DIR})
     ADD_DEFINITIONS( "-DHAS_BOOST" )

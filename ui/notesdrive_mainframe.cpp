@@ -30,6 +30,7 @@
     #include <wx/wx.h>
 #endif
 
+#include <boost/filesystem.hpp>
 #include <boost/asio/ip/address.hpp>
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/asio.hpp>
@@ -61,6 +62,7 @@ NotesDrive_MainFrame::NotesDrive_MainFrame(const wxString& title, const wxPoint&
     : wxFrame(NULL, wxID_ANY, title, pos, size)
 {
     InitElements();
+    InitKeys();
 }
 
 NotesDrive_MainFrame::~NotesDrive_MainFrame()
@@ -76,7 +78,6 @@ void NotesDrive_MainFrame::InitElements()
     SetupFileTree();
     SetupTxtBox();
 }
-
 void NotesDrive_MainFrame::SetupMenuBar()
 {
     menuFile = new wxMenu;
@@ -95,13 +96,11 @@ void NotesDrive_MainFrame::SetupMenuBar()
     menuBar->Append( menuHelp, "&Help" );
     SetMenuBar( menuBar );
 }
-
 void NotesDrive_MainFrame::SetupStatusBar()
 {
     CreateStatusBar();
     SetStatusText( "Welcome to NotesDrive!" );
 }
-
 void NotesDrive_MainFrame::SetupSizer()
 {
     borderBox = new wxBoxSizer(wxHORIZONTAL);
@@ -112,17 +111,67 @@ void NotesDrive_MainFrame::SetupSizer()
     borderBox->Add(mainFlexGrid, 100, wxEXPAND | wxALL, 5);
     SetSizer(borderBox);
 }
-
 void NotesDrive_MainFrame::SetupFileTree()
 {
     fileListBox = new wxListBox(this, ID_LISTBOX, wxPoint(-1,-1), wxSize(-1,-1));
     mainFlexGrid->Add(fileListBox, 1, wxEXPAND);
 }
-
 void NotesDrive_MainFrame::SetupTxtBox()
 {
     editorTxtBox = new wxTextCtrl(this, ID_TEXTBOX, wxEmptyString, wxPoint(-1,-1), wxSize(-1,-1), wxTE_PROCESS_ENTER | wxTE_PROCESS_TAB | wxTE_MULTILINE);
     mainFlexGrid->Add(editorTxtBox, 2, wxEXPAND);
+}
+
+void NotesDrive_MainFrame::InitKeys()
+{
+    cout << "Fetching RSA keys." << endl;
+    boost::filesystem::path priaveKeyPath(boost::filesystem::current_path().string() + "/keys/RSA-Private.key");
+    boost::filesystem::path publicKeyPath(boost::filesystem::current_path().string() + "/keys/RSA-Public.key");
+    boost::filesystem::path keyFolderPath(boost::filesystem::current_path().string() + "/keys");
+    if(!KeysExist(priaveKeyPath, publicKeyPath))
+    {
+        cout << "RSA keys not found, generating..." << endl;
+        KeyPair = RSAEncryption::GenerateKeys();
+        if(!KeyFolderExists(keyFolderPath))
+        {
+            boost::filesystem::create_directory(keyFolderPath);
+        }
+        RSAEncryption::SaveKeys(KeyPair, priaveKeyPath.string(), publicKeyPath.string());
+        cout << "RSA keys saved to disk." << endl;
+    }
+    else
+    {
+        KeyPair = RSAEncryption::LoadKeys(priaveKeyPath.string(), publicKeyPath.string());
+        cout << "RSA keys loaded." << endl;
+    }
+}
+bool NotesDrive_MainFrame::KeysExist(boost::filesystem::path priaveKeyPath, boost::filesystem::path publicKeyPath)
+{
+    if(boost::filesystem::exists(priaveKeyPath) && boost::filesystem::is_regular_file(priaveKeyPath) &&
+        boost::filesystem::exists(publicKeyPath) && boost::filesystem::is_regular_file(publicKeyPath)
+    )
+    {
+        return true;
+    }
+    else
+    {
+        return false;
+    }
+}
+bool NotesDrive_MainFrame::KeyFolderExists(boost::filesystem::path keyFolderPath)
+{
+    if(boost::filesystem::exists(keyFolderPath) && boost::filesystem::is_directory(keyFolderPath))
+    {
+        return true;
+    }
+    else if(boost::filesystem::exists(keyFolderPath) && !boost::filesystem::is_directory(keyFolderPath))
+    {
+        boost::filesystem::remove_all(keyFolderPath);
+    }
+    else
+    {
+        return false;
+    }
 }
 
 void NotesDrive_MainFrame::OnAbout(wxCommandEvent& event)
@@ -186,9 +235,13 @@ void NotesDrive_MainFrame::ConnectToServer(ConnectionData* data)
 
 bool NotesDrive_MainFrame::AuthenticateWithServer(string userName, string password, string yubiKeyOTP)
 {
-    if(SendUserName(userName) == false)
+    if(SendUserName(userName) == false && IsAuthenticationAccepted())
     {
         return false;
+    }
+    else
+    {
+        ExchangeKeys();
     }
     if(SendYubiKeyOTP(yubiKeyOTP) == false)
     {
@@ -200,6 +253,12 @@ bool NotesDrive_MainFrame::AuthenticateWithServer(string userName, string passwo
         return true;
     }
 }
+
+void NotesDrive_MainFrame::ExchangeKeys()
+{
+
+}
+
 bool NotesDrive_MainFrame::SendUserName(string userName)
 {
     cout << "Sending username." << endl;
@@ -241,7 +300,6 @@ bool NotesDrive_MainFrame::SendYubiKeyOTP(string yubiKeyOTP)
 }
 bool NotesDrive_MainFrame::IsAuthenticationAccepted()
 {
-    cout << "Checking if authentication was accepted." << endl;
     try
     {
         char reply[32];

@@ -30,11 +30,14 @@
     #include <wx/wx.h>
 #endif
 
+#include "../networking/networking.h"
+
 #include <boost/filesystem.hpp>
 #include <boost/asio/ip/address.hpp>
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/asio.hpp>
 #include <boost/system/error_code.hpp>
+#include <boost/thread.hpp>
 
 using namespace std;
 using namespace boost::asio::ip;

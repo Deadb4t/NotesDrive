@@ -38,6 +38,36 @@
 
 using namespace std;
 
+void Networking::DoKeyExchange(RSAKeyPair& cliKeyPair, RSAKeyPair& srvKeyPair, boost::asio::ip::tcp::socket* socket)
+{
+    RequestServPublicKey(socket);
+    int keyFileSize = GetServPublicKeyHeader(socket);
+    srvKeyPair = GetServPublicKey(keyFileSize, socket);
+    
+    GetRequestForClientPublicKey(socket);
+    SendClientPublicKeyHeader(cliKeyPair, socket);
+    SendClientPublicKey(cliKeyPair, socket);
+}
+void Networking::RequestServPublicKey(boost::asio::ip::tcp::socket* socket)
+{
+    size_t length = max_key_request_size;
+    string msg = "REQPK";
+    boost::asio::write(*socket, boost::asio::buffer(msg.c_str(), length));
+}
+int Networking::GetServPublicKeyHeader(boost::asio::ip::tcp::socket* socket)
+{
+    size_t length = max_key_request_size;
+    char headerChar[length];
+    size_t header_length = boost::asio::read(*socket,  boost::asio::buffer(headerChar, length));
+    string headerStr = headerChar;
+    return boost::lexical_cast<int>(headerStr);
+}
+RSAKeyPair Networking::GetServPublicKey(int keyFileSize, boost::asio::ip::tcp::socket* socket)
+{
+    RSAKeyPair servKeyPair;
+    
+}
+
 bool Networking::SendRSAMsg(RSAKeyPair cliKeyPair,
                             RSAKeyPair srvKeyPair,
                             std::string toSend,
@@ -74,10 +104,20 @@ std::string Networking::GetRSAMsg(RSAKeyPair cliKeyPair, RSAKeyPair srvKeyPair, 
         string msgPT = RSAEncryption::RSADecrypt(cliKeyPair, msgCT);
         bool isValidSig = RSAEncryption::VerifySignature(srvKeyPair, msgPT, signature);
         bool isValidTimeStamp = ValidTimeStamp(msgPT);
+        if(isValidSig && isValidTimeStamp)
+        {
+            return msgPT;
+        }
+        else
+        {
+            cout << "Could no verify message from server" << endl;
+            return "";
+        }
     }
     catch(std::exception &e)
     {
-        
+        cout << "Error fetching response from server: " << e.what() << endl;
+        return "";
     }
 }
 
@@ -85,6 +125,25 @@ string Networking::MakeDateTimeStamp()
 {
     boost::posix_time::ptime now = boost::posix_time::second_clock::universal_time();
     return to_iso_string(now);
+}
+bool Networking::ValidTimeStamp(string msg)
+{
+    string line;
+    istringstream msgReader(msg);
+    getline(msgReader, line);
+    boost::posix_time::ptime timeStamp(boost::posix_time::from_iso_string(line));
+    boost::posix_time::ptime now = boost::posix_time::second_clock::universal_time();
+    boost::posix_time::time_duration td = now - timeStamp;
+    if(td.seconds() <= 15 && 
+       td.minutes() == 0 && td.hours() == 0 &&
+       timeStamp.date() == now.date())
+    {
+        return true;
+    }
+    else
+    {
+        return false;
+    }
 }
 
 void Networking::SendHeader(MsgHeader header, boost::asio::ip::tcp::socket* socket)
@@ -132,13 +191,5 @@ string Networking::GetMsgSignature(MsgHeader header, boost::asio::ip::tcp::socke
     size_t sig_length = boost::asio::read(*socket,  boost::asio::buffer(sigChar, length));
     string sig = sigChar;
     return sig;
-}
-
-bool Networking::ValidTimeStamp(string msg)
-{
-    string line;
-    istringstream msgReader(msg);
-    getline(msgReader, line);
-    boost::posix_time::ptime timeStamp(boost::posix_time::from_iso_string(line));
 }
 

@@ -34,8 +34,13 @@ struct MsgHeader
 class Networking
 {    
     enum {max_header_size = 256};
+    enum {max_key_request_size = 128};
     
     public:
+        static void DoKeyExchange(RSAKeyPair &cliKeyPair,
+                                  RSAKeyPair &srvKeyPair,
+                                  boost::asio::ip::tcp::socket *socket);
+        
         static bool SendRSAMsg(RSAKeyPair cliKeyPair,
                                     RSAKeyPair srvKeyPair,
                                     std::string toSend,
@@ -46,7 +51,16 @@ class Networking
                                      boost::asio::ip::tcp::socket *socket);
         
     private:
+        static void RequestServPublicKey(boost::asio::ip::tcp::socket *socket);
+        static int GetServPublicKeyHeader(boost::asio::ip::tcp::socket *socket);
+        static RSAKeyPair GetServPublicKey(int keyFileSize, boost::asio::ip::tcp::socket *socket);
+        
+        static void GetRequestForClientPublicKey(boost::asio::ip::tcp::socket *socket);
+        static void SendClientPublicKeyHeader(RSAKeyPair &cliKeyPair, boost::asio::ip::tcp::socket *socket);
+        static void SendClientPublicKey(RSAKeyPair &cliKeyPair, boost::asio::ip::tcp::socket *socket);
+        
         static std::string MakeDateTimeStamp();
+        static bool ValidTimeStamp(std::string msg);
         
         static void SendHeader(MsgHeader header, boost::asio::ip::tcp::socket *socket);
         static void SendCTMsg(std::string msg, boost::asio::ip::tcp::socket *socket);
@@ -56,7 +70,7 @@ class Networking
         static std::string GetCTMsg(MsgHeader header, boost::asio::ip::tcp::socket *socket);
         static std::string GetMsgSignature(MsgHeader header, boost::asio::ip::tcp::socket *socket);
         
-        static bool ValidTimeStamp(std::string msg);
+        
 };
 
 #endif // NETWORKING_H

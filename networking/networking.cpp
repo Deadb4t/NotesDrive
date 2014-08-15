@@ -23,6 +23,7 @@
 
 #include <string>
 #include <iostream>
+#include <fstream>
 #include <vector>
 #include <sstream>
 
@@ -35,18 +36,71 @@
 #include <boost/date_time/gregorian/gregorian.hpp>
 #include <boost/algorithm/string.hpp>
 #include <boost/lexical_cast.hpp>
+#include <boost/filesystem.hpp>
+#include <boost/filesystem/path.hpp>
 
 using namespace std;
 
-void Networking::DoKeyExchange(RSAKeyPair& cliKeyPair, RSAKeyPair& srvKeyPair, boost::asio::ip::tcp::socket* socket)
+bool Networking::KeysExchanged(boost::asio::ip::tcp::socket* socket)
+{
+    string serverAddress = socket->remote_endpoint().address().to_string();
+    if(HasServerKey(serverAddress))
+    {
+	RSAKeyPair cliKeyPair = RSAEncryption::LoadKeys("./keys/RSA-Private.key",
+	    "RSA-Public.key");
+	RSAKeyPair servKeyPair;
+	string servKeyPath = "./keys/" + serverAddress + "/RSA-Public.key";
+	RSAEncryption::LoadPublicKey(servKeyPair, "./keys/");
+	return KeyCheck(cliKeyPair, servKeyPair, socket);
+    }
+    else
+    {
+	return false;
+    }
+}
+bool Networking::HasServerKey(string serverAddress)
+{
+    boost::filesystem::path p("./keys/ " + serverAddress + "/RSA-Public.key");
+    if(boost::filesystem::exists(p) && boost::filesystem::is_regular(p))
+    {
+	return true;
+    }
+    else
+    {
+	return false;
+    }
+}
+bool Networking::KeyCheck(RSAKeyPair cliKeyPair, RSAKeyPair srvKeyPair, boost::asio::ip::tcp::socket* socket)
+{
+    if(!SendRSAMsg(cliKeyPair, srvKeyPair, "Ping", socket))
+	return false;
+    string reply = GetRSAMsg(cliKeyPair, srvKeyPair, socket);
+    if(reply == "Pong")
+    {
+	return true;
+    }
+    else
+    {
+	return false;
+    }
+}
+
+void Networking::DoKeyExchange(RSAKeyPair& srvKeyPair, boost::asio::ip::tcp::socket* socket)
 {
     RequestServPublicKey(socket);
     int keyFileSize = GetServPublicKeyHeader(socket);
     srvKeyPair = GetServPublicKey(keyFileSize, socket);
     
+    if(!RSAEncryption::ValidatePublicKey(srvKeyPair.PublicKey))
+    {
+	throw;
+	return;
+    }
+    
+    string keyFileData = LoadPublicKeyFileData();
     GetRequestForClientPublicKey(socket);
-    SendClientPublicKeyHeader(cliKeyPair, socket);
-    SendClientPublicKey(cliKeyPair, socket);
+    SendClientPublicKeyHeader(keyFileData, socket);
+    SendClientPublicKey(keyFileData, socket);
 }
 void Networking::RequestServPublicKey(boost::asio::ip::tcp::socket* socket)
 {
@@ -65,8 +119,76 @@ int Networking::GetServPublicKeyHeader(boost::asio::ip::tcp::socket* socket)
 RSAKeyPair Networking::GetServPublicKey(int keyFileSize, boost::asio::ip::tcp::socket* socket)
 {
     RSAKeyPair servKeyPair;
-    
+    size_t length = keyFileSize;
+    char keyFileChar[length];
+    boost::asio::read(*socket,  boost::asio::buffer(keyFileChar, length));
+    string keyFileStr = keyFileChar;
+    string serverName = socket->remote_endpoint().address().to_string();
+    boost::filesystem::path keyPath("./keys/" + serverName + "/RSA-Public.key");
+    SaveKeyToFile(keyFileStr, serverName);
+    RSAEncryption::LoadPublicKey(servKeyPair, keyPath.relative_path().generic_string());
+    return servKeyPair;
 }
+void Networking::SaveKeyToFile(string keyData, string serverName)
+{
+    boost::filesystem::path keyDir("./keys/" + serverName);
+    if(!boost::filesystem::is_directory(keyDir) && !boost::filesystem::exists(keyDir))
+    {
+	boost::filesystem::create_directory(keyDir);
+    }
+    boost::filesystem::path keyPath("./keys/" + serverName + "/RSA-Public.key");
+    ofstream keyFileStream;
+    keyFileStream.open(keyPath.relative_path().generic_string().c_str());
+    keyFileStream << keyData;
+    keyFileStream.close();
+}
+void Networking::GetRequestForClientPublicKey(boost::asio::ip::tcp::socket* socket)
+{
+    size_t length = max_key_request_size;
+    char requestChar[length];
+    size_t reqestSize = boost::asio::read(*socket,  boost::asio::buffer(requestChar, length));
+    string requestStr = requestChar;
+    if(requestStr == "REQPK")
+    {
+	return;
+    }
+    else
+    {
+	throw;
+    }
+}
+string Networking::LoadPublicKeyFileData()
+{
+    boost::filesystem::path keyFilePath("keys/RSA-Public.key");
+    ifstream keyFileStream(keyFilePath.relative_path().generic_string().c_str(),
+	ios::in|ios::binary|ios::ate
+    );
+    string keyFileData;
+    streampos size;
+    char* memblock;
+    if(keyFileStream.is_open())
+    {
+	size = keyFileStream.tellg();
+	memblock = new char[size];
+	keyFileStream.seekg (0, ios::beg);
+	keyFileStream.read (memblock, size);
+	keyFileStream.close();
+    }
+    keyFileData = memblock;
+    return keyFileData;
+}
+void Networking::SendClientPublicKeyHeader(string keyFileData, boost::asio::ip::tcp::socket* socket)
+{
+    string headerStr = boost::lexical_cast<string>(keyFileData.size());
+    size_t length = max_header_size;
+    boost::asio::write(*socket, boost::asio::buffer(headerStr.c_str(), length));
+}
+void Networking::SendClientPublicKey(string keyFileData, boost::asio::ip::tcp::socket* socket)
+{
+    size_t length = keyFileData.size();
+    boost::asio::write(*socket, boost::asio::buffer(keyFileData.c_str(), length));
+}
+
 
 bool Networking::SendRSAMsg(RSAKeyPair cliKeyPair,
                             RSAKeyPair srvKeyPair,

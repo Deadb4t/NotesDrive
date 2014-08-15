@@ -37,8 +37,9 @@ class Networking
     enum {max_key_request_size = 128};
     
     public:
-        static void DoKeyExchange(RSAKeyPair &cliKeyPair,
-                                  RSAKeyPair &srvKeyPair,
+        static bool KeysExchanged(boost::asio::ip::tcp::socket *socket);
+        
+        static void DoKeyExchange(RSAKeyPair &srvKeyPair,
                                   boost::asio::ip::tcp::socket *socket);
         
         static bool SendRSAMsg(RSAKeyPair cliKeyPair,
@@ -51,13 +52,20 @@ class Networking
                                      boost::asio::ip::tcp::socket *socket);
         
     private:
+        static bool HasServerKey(std::string serverAddress);
+        static bool KeyCheck(RSAKeyPair cliKeyPair,
+                             RSAKeyPair srvKeyPair,
+                             boost::asio::ip::tcp::socket *socket);
+        
         static void RequestServPublicKey(boost::asio::ip::tcp::socket *socket);
         static int GetServPublicKeyHeader(boost::asio::ip::tcp::socket *socket);
         static RSAKeyPair GetServPublicKey(int keyFileSize, boost::asio::ip::tcp::socket *socket);
+	static void SaveKeyToFile(std::string keyData, std::string serverName);
         
         static void GetRequestForClientPublicKey(boost::asio::ip::tcp::socket *socket);
-        static void SendClientPublicKeyHeader(RSAKeyPair &cliKeyPair, boost::asio::ip::tcp::socket *socket);
-        static void SendClientPublicKey(RSAKeyPair &cliKeyPair, boost::asio::ip::tcp::socket *socket);
+        static std::string LoadPublicKeyFileData();
+        static void SendClientPublicKeyHeader(std::string keyFileData, boost::asio::ip::tcp::socket *socket);
+        static void SendClientPublicKey(std::string keyFileData, boost::asio::ip::tcp::socket *socket);
         
         static std::string MakeDateTimeStamp();
         static bool ValidTimeStamp(std::string msg);

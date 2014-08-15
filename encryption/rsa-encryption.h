@@ -43,19 +43,21 @@ class RSAEncryption
         
         static RSAKeyPair GenerateKeys();
         
-        static bool SaveKeys(RSAKeyPair keyPair, 
+        static void SaveKeys(RSAKeyPair keyPair, 
                                   std::string privateKeyFileName = "RSA-Private.key",
                                   std::string publicKeyFileName = "RSA-Public.key");
         
         static RSAKeyPair LoadKeys(std::string privateKeyFileName = "RSA-Private.key",
                             std::string publicKeyFileName = "RSA-Public.key");
         
+        static void LoadPublicKey(RSAKeyPair keyPair, std::string fileName);
+        static bool ValidatePublicKey(CryptoPP::RSA::PublicKey key);
+        
     private:
-        static bool SavePrivateKey(CryptoPP::RSA::PrivateKey key, std::string fileName);
-        static bool SavePublicKey(CryptoPP::RSA::PublicKey key, std::string fileName);
+        static void SavePrivateKey(CryptoPP::RSA::PrivateKey key, std::string fileName);
+        static void SavePublicKey(CryptoPP::RSA::PublicKey key, std::string fileName);
         
         static RSAKeyPair LoadPrivateKey(RSAKeyPair keyPair, std::string fileName);
-        static RSAKeyPair LoadPublicKey(RSAKeyPair keyPair, std::string fileName);
         static RSAKeyPair ValidateKeyPair(RSAKeyPair keyPair);
 };
 

@@ -101,54 +101,30 @@ RSAKeyPair RSAEncryption::GenerateKeys()
     return keyPair;
 }
 
-bool RSAEncryption::SaveKeys(RSAKeyPair keyPair, 
+void RSAEncryption::SaveKeys(RSAKeyPair keyPair, 
                           string privateKeyFileName,
                           string publicKeyFileName)
 {
-    if(SavePrivateKey(keyPair.PrivateKey, privateKeyFileName) &&
-       SavePublicKey(keyPair.PublicKey, publicKeyFileName)
-    )
-    {
-        return true;
-    }
-    else
-    {
-        return false;
-    }
+    SavePrivateKey(keyPair.PrivateKey, privateKeyFileName);
+    SavePublicKey(keyPair.PublicKey, publicKeyFileName);
 }
-bool RSAEncryption::SavePrivateKey(RSA::PrivateKey key, string fileName)
+void RSAEncryption::SavePrivateKey(RSA::PrivateKey key, string fileName)
 {
-    try
-    {
-        ByteQueue queue;
-        key.Save(queue);
-        BufferedTransformation& bt = queue;
-        FileSink file(fileName.c_str());
-        bt.CopyTo(file);
-        file.MessageEnd();
-    }
-    catch(std::exception &e)
-    {
-        cout << "Error saving private key: " << e.what() << endl;
-        return false;
-    }
+    ByteQueue queue;
+    key.Save(queue);
+    BufferedTransformation& bt = queue;
+    FileSink file(fileName.c_str());
+    bt.CopyTo(file);
+    file.MessageEnd();
 }
-bool RSAEncryption::SavePublicKey(RSA::PublicKey key, string fileName)
+void RSAEncryption::SavePublicKey(RSA::PublicKey key, string fileName)
 {
-    try
-    {
-        ByteQueue queue;
-        key.Save(queue);
-        BufferedTransformation& bt = queue;
-        FileSink file(fileName.c_str());
-        bt.CopyTo(file);
-        file.MessageEnd();
-    }
-    catch(std::exception &e)
-    {
-        cout << "Error saving public key: " << e.what() << endl;
-        return false;
-    }
+    ByteQueue queue;
+    key.Save(queue);
+    BufferedTransformation& bt = queue;
+    FileSink file(fileName.c_str());
+    bt.CopyTo(file);
+    file.MessageEnd();
 }
 
 RSAKeyPair RSAEncryption::LoadKeys(string privateKeyFileName, string publicKeyFileName)
@@ -157,7 +133,7 @@ RSAKeyPair RSAEncryption::LoadKeys(string privateKeyFileName, string publicKeyFi
     keyPair.Loaded = true;
     keyPair.Validated = false;
     keyPair = LoadPrivateKey(keyPair, privateKeyFileName);
-    keyPair = LoadPublicKey(keyPair, publicKeyFileName);
+    LoadPublicKey(keyPair, publicKeyFileName);
     if(keyPair.Loaded)
     {
         ValidateKeyPair(keyPair);
@@ -182,24 +158,28 @@ RSAKeyPair RSAEncryption::LoadPrivateKey(RSAKeyPair keyPair, string fileName)
         cout << "Error loading private key: " << e.what() << endl;
     }
 }
-RSAKeyPair RSAEncryption::LoadPublicKey(RSAKeyPair keyPair, string fileName)
+void RSAEncryption::LoadPublicKey(RSAKeyPair keyPair, string fileName)
 {
-    try
+    ByteQueue queue;
+    FileSource file(fileName.c_str(), true /*pumpAll*/);
+    BufferedTransformation& bt = queue;
+    file.TransferTo(bt);
+    bt.MessageEnd();
+    keyPair.PublicKey.Load(queue);
+}
+bool RSAEncryption::ValidatePublicKey(RSA::PublicKey key)
+{
+    AutoSeededRandomPool rng;
+    if(!key.Validate(rng, 3))
     {
-        ByteQueue queue;
-        FileSource file(fileName.c_str(), true /*pumpAll*/);
-        BufferedTransformation& bt = queue;
-        file.TransferTo(bt);
-        bt.MessageEnd();
-        keyPair.PublicKey.Load(queue);
-        return keyPair;
+        return false;
     }
-    catch(std::exception &e)
+    else
     {
-        keyPair.Loaded = false;
-        cout << "Error locading public key: " << e.what() << endl;
+        return true;
     }
 }
+
 RSAKeyPair RSAEncryption::ValidateKeyPair(RSAKeyPair keyPair)
 {
     AutoSeededRandomPool rng;

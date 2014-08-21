@@ -50,7 +50,7 @@ class RSAEncryption
         static RSAKeyPair LoadKeys(std::string privateKeyFileName = "RSA-Private.key",
                             std::string publicKeyFileName = "RSA-Public.key");
         
-        static void LoadPublicKey(RSAKeyPair keyPair, std::string fileName);
+        static void LoadPublicKey(RSAKeyPair &keyPair, std::string fileName);
         static bool ValidatePublicKey(CryptoPP::RSA::PublicKey key);
         
     private:

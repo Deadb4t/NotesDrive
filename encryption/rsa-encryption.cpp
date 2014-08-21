@@ -158,14 +158,22 @@ RSAKeyPair RSAEncryption::LoadPrivateKey(RSAKeyPair keyPair, string fileName)
         cout << "Error loading private key: " << e.what() << endl;
     }
 }
-void RSAEncryption::LoadPublicKey(RSAKeyPair keyPair, string fileName)
+void RSAEncryption::LoadPublicKey(RSAKeyPair &keyPair, string fileName)
 {
-    ByteQueue queue;
-    FileSource file(fileName.c_str(), true /*pumpAll*/);
-    BufferedTransformation& bt = queue;
-    file.TransferTo(bt);
-    bt.MessageEnd();
-    keyPair.PublicKey.Load(queue);
+    try
+    {
+        ByteQueue queue;
+        FileSource file(fileName.c_str(), true /*pumpAll*/);
+        BufferedTransformation& bt = queue;
+        file.TransferTo(bt);
+        bt.MessageEnd();
+        keyPair.PublicKey.Load(queue);
+    }
+    catch(std::exception &e)
+    {
+        keyPair.Loaded = false;
+        cout << "Error loading public key: " << e.what() << endl;
+    }
 }
 bool RSAEncryption::ValidatePublicKey(RSA::PublicKey key)
 {

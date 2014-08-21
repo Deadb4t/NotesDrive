@@ -83,7 +83,6 @@ class NotesDrive_MainFrame : public wxFrame
         
         bool AuthenticateWithServer(std::string userName, std::string password, std::string yubiKeyOTP);
         bool SendUserName(std::string userName);
-        void ExchangeKeys();
         // bool SendPassword(std::string password);
         bool SendYubiKeyOTP(std::string yubiKeyOTP);
         bool IsAuthenticationAccepted();

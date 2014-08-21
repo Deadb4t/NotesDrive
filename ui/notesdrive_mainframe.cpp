@@ -31,6 +31,12 @@
 #endif
 
 #include "../networking/networking.h"
+#include "../authentication/ecdh-authentication.h"
+#include "../hashing/sha3-hashing.h"
+#include "../encryption/utils-encryption.h"
+#include "../encryption/aes-encryption.h"
+
+#include <secblock.h>
 
 #include <boost/filesystem.hpp>
 #include <boost/asio/ip/address.hpp>
@@ -64,6 +70,16 @@ wxEND_EVENT_TABLE()
 NotesDrive_MainFrame::NotesDrive_MainFrame(const wxString& title, const wxPoint& pos, const wxSize& size) 
     : wxFrame(NULL, wxID_ANY, title, pos, size)
 {
+    ECDHKeyPair cliKP = ECDHAuthentication::GenerateKeyPair();
+    ECDHKeyPair srvKP = ECDHAuthentication::GenerateKeyPair();
+    string shared = ECDHAuthentication::MakeShared(cliKP, srvKP);
+    SHA3Hash sharedHash = SHA3Hashing::SaltedHash256String(shared);
+    string plainText = "Hello World";
+    cout << "Shared: " << sharedHash.Hash.data() << endl;
+    cout << "Shared Bytes Size: " << shared.size() << endl;
+    cout << "Salt: " << sharedHash.Salt << endl;
+    string cipherText = AESEncryptor::Encrypt(plainText, sharedHash.Hash, sharedHash.Salt);
+    cout << "CT: " << cipherText << endl;
     InitElements();
     InitKeys();
 }
@@ -228,38 +244,40 @@ void NotesDrive_MainFrame::ConnectToServer(ConnectionData* data)
         {
             SetStatusText("Connection failed...");
             menuFile->Enable(ID_CONNECT, true);
-        }
+        }       
     }
     catch(boost::system::system_error er)
     {
         SetStatusText("Connection failed...");
+        menuFile->Enable(ID_CONNECT, true);
     }
 }
 
 bool NotesDrive_MainFrame::AuthenticateWithServer(string userName, string password, string yubiKeyOTP)
 {
-    if(SendUserName(userName) == false && IsAuthenticationAccepted())
-    {
-        return false;
-    }
-    else
-    {
-        ExchangeKeys();
-    }
-    if(SendYubiKeyOTP(yubiKeyOTP) == false)
-    {
-        return false;
-    }
-    if(IsAuthenticationAccepted())
-    {
-        cout << "Authentication accepted." << endl;
-        return true;
-    }
-}
-
-void NotesDrive_MainFrame::ExchangeKeys()
-{
-
+//     bool userNameSent = SendUserName(userName);
+//     cout << "Username sent" << endl;
+//     RSAKeyPair servKeyPair;
+//     if(!Networking::KeysExchanged(Socket))
+//         cout << "Doing key exchange" << endl;
+//         Networking::DoKeyExchange(servKeyPair, Socket);
+//     if(userNameSent == false && IsAuthenticationAccepted())
+//     {
+//         return false;
+//     }
+//     else
+//     {
+//         
+//     }
+//     if(SendYubiKeyOTP(yubiKeyOTP) == false)
+//     {
+//         return false;
+//     }
+//     if(IsAuthenticationAccepted())
+//     {
+//         cout << "Authentication accepted." << endl;
+//         return true;
+//     }
 }
 
 bool NotesDrive_MainFrame::SendUserName(string userName)

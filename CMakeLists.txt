@@ -4,7 +4,7 @@ project(notesdrive)
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/Modules/")
 
-add_executable(notesdrive networking/networking.cpp encryption/rsa-encryption.cpp ui/notesdrive_connectdialog.cpp ui/notesdrive_mainframe.cpp ui/notesdrive_app.cpp main.cpp)
+add_executable(notesdrive encryption/aes-encryption.cpp authentication/ecdh-authentication.cpp authentication/utils-authentication.cpp authentication/authentication.cpp networking/networking.cpp encryption/rsa-encryption.cpp encryption/utils-encryption.cpp hashing/sha3-hashing.cpp ui/notesdrive_connectdialog.cpp ui/notesdrive_mainframe.cpp ui/notesdrive_app.cpp main.cpp)
 
 install(TARGETS notesdrive RUNTIME DESTINATION bin)
 

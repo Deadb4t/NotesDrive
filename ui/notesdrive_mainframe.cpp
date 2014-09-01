@@ -22,6 +22,7 @@
 #include <string>
 #include <iostream>
 #include <map>
+#include <stdexcept>
 
 #include <wx/wxprec.h>
 #include <wx/richtext/richtextbuffer.h>
@@ -32,9 +33,6 @@
 
 #include "../networking/networking.h"
 #include "../authentication/ecdh-authentication.h"
-#include "../hashing/sha3-hashing.h"
-#include "../encryption/utils-encryption.h"
-#include "../encryption/aes-encryption.h"
 
 #include <secblock.h>
 
@@ -70,16 +68,6 @@ wxEND_EVENT_TABLE()
 NotesDrive_MainFrame::NotesDrive_MainFrame(const wxString& title, const wxPoint& pos, const wxSize& size) 
     : wxFrame(NULL, wxID_ANY, title, pos, size)
 {
-    ECDHKeyPair cliKP = ECDHAuthentication::GenerateKeyPair();
-    ECDHKeyPair srvKP = ECDHAuthentication::GenerateKeyPair();
-    string shared = ECDHAuthentication::MakeShared(cliKP, srvKP);
-    SHA3Hash sharedHash = SHA3Hashing::SaltedHash256String(shared);
-    string plainText = "Hello World";
-    cout << "Shared: " << sharedHash.Hash.data() << endl;
-    cout << "Shared Bytes Size: " << shared.size() << endl;
-    cout << "Salt: " << sharedHash.Salt << endl;
-    string cipherText = AESEncryptor::Encrypt(plainText, sharedHash.Hash, sharedHash.Salt);
-    cout << "CT: " << cipherText << endl;
     InitElements();
     InitKeys();
 }
@@ -143,53 +131,16 @@ void NotesDrive_MainFrame::SetupTxtBox()
 
 void NotesDrive_MainFrame::InitKeys()
 {
-    cout << "Fetching RSA keys." << endl;
-    boost::filesystem::path priaveKeyPath(boost::filesystem::current_path().string() + "/keys/RSA-Private.key");
-    boost::filesystem::path publicKeyPath(boost::filesystem::current_path().string() + "/keys/RSA-Public.key");
-    boost::filesystem::path keyFolderPath(boost::filesystem::current_path().string() + "/keys");
-    if(!KeysExist(priaveKeyPath, publicKeyPath))
+    cout << "Fetching ECDSA keys." << endl;
+    try
     {
-        cout << "RSA keys not found, generating..." << endl;
-        KeyPair = RSAEncryption::GenerateKeys();
-        if(!KeyFolderExists(keyFolderPath))
-        {
-            boost::filesystem::create_directory(keyFolderPath);
-        }
-        RSAEncryption::SaveKeys(KeyPair, priaveKeyPath.string(), publicKeyPath.string());
-        cout << "RSA keys saved to disk." << endl;
+        KeyPair = ECDSAAuthentication::LoadKeyPair("ec.private.key", "ec.public.key");
     }
-    else
+    catch(std::exception &e)
     {
-        KeyPair = RSAEncryption::LoadKeys(priaveKeyPath.string(), publicKeyPath.string());
-        cout << "RSA keys loaded." << endl;
-    }
-}
-bool NotesDrive_MainFrame::KeysExist(boost::filesystem::path priaveKeyPath, boost::filesystem::path publicKeyPath)
-{
-    if(boost::filesystem::exists(priaveKeyPath) && boost::filesystem::is_regular_file(priaveKeyPath) &&
-        boost::filesystem::exists(publicKeyPath) && boost::filesystem::is_regular_file(publicKeyPath)
-    )
-    {
-        return true;
-    }
-    else
-    {
-        return false;
-    }
-}
-bool NotesDrive_MainFrame::KeyFolderExists(boost::filesystem::path keyFolderPath)
-{
-    if(boost::filesystem::exists(keyFolderPath) && boost::filesystem::is_directory(keyFolderPath))
-    {
-        return true;
-    }
-    else if(boost::filesystem::exists(keyFolderPath) && !boost::filesystem::is_directory(keyFolderPath))
-    {
-        boost::filesystem::remove_all(keyFolderPath);
-    }
-    else
-    {
-        return false;
+        cout << e.what() << endl;
+        KeyPair = ECDSAAuthentication::GenerateKeyPair();
+        ECDSAAuthentication::SaveKeyPair(KeyPair, "ec.private.key", "ec.public.key");
     }
 }
 
@@ -278,25 +229,6 @@ bool NotesDrive_MainFrame::AuthenticateWithServer(string userName, string passwo
 //         cout << "Authentication accepted." << endl;
 //         return true;
 //     }
-}
-
-bool NotesDrive_MainFrame::SendUserName(string userName)
-{
-    cout << "Sending username." << endl;
-    try
-    {
-        size_t length = max_user_name_size;
-        boost::asio::write(*Socket, boost::asio::buffer(userName.c_str(), length));
-        return true;
-    }
-    catch(std::exception& e)
-    {
-        std::cerr << "Exception in sending User Name: " << e.what() << "\n";
-        SetStatusText("Connection failed...");
-        wxMessageDialog *dial = new wxMessageDialog(this, wxString("Error sending User Name.\nSee console output for details."), wxString("Error"), wxOK | wxICON_ERROR);
-        dial->ShowModal();
-        return false;
-    }
 }
 bool NotesDrive_MainFrame::SendYubiKeyOTP(string yubiKeyOTP)
 {

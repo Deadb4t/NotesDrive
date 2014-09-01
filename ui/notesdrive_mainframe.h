@@ -33,7 +33,7 @@
 #include <boost/filesystem.hpp>
 
 #include "notesdrive_connectdialog.h"
-#include "../encryption/rsa-encryption.h"
+#include "../authentication/ecdsa-authentication.h"
 
 struct ServerConnection
 {
@@ -66,7 +66,7 @@ class NotesDrive_MainFrame : public wxFrame
         ServerConnection Connection;
         boost::asio::ip::tcp::socket* Socket;
         
-        RSAKeyPair KeyPair;
+        ECDSAKeyPair KeyPair;
         
         void InitElements();
         void SetupMenuBar();
@@ -76,13 +76,10 @@ class NotesDrive_MainFrame : public wxFrame
         void SetupTxtBox();
         
         void InitKeys();
-        bool KeysExist(boost::filesystem::path priaveKeyPath, boost::filesystem::path publicKeyPath);
-        bool KeyFolderExists(boost::filesystem::path keyFolderPath);
         
         void ConnectToServer(ConnectionData *data);
         
         bool AuthenticateWithServer(std::string userName, std::string password, std::string yubiKeyOTP);
-        bool SendUserName(std::string userName);
         // bool SendPassword(std::string password);
         bool SendYubiKeyOTP(std::string yubiKeyOTP);
         bool IsAuthenticationAccepted();

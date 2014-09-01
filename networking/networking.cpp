@@ -19,299 +19,165 @@
 
 #include "networking.h"
 
-#include "../encryption/rsa-encryption.h"
-
 #include <string>
-#include <iostream>
-#include <fstream>
-#include <vector>
-#include <sstream>
 
+#include <boost/lexical_cast.hpp>
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/asio.hpp>
-#include <boost/date_time/posix_time/posix_time.hpp>
-#include <boost/date_time/posix_time/time_parsers.hpp>
-#include <boost/date_time/posix_time/time_formatters.hpp>
-#include <boost/date_time/posix_time/ptime.hpp>
-#include <boost/date_time/gregorian/gregorian.hpp>
-#include <boost/algorithm/string.hpp>
-#include <boost/lexical_cast.hpp>
-#include <boost/filesystem.hpp>
-#include <boost/filesystem/path.hpp>
+
+#include <secblock.h>
+
+#include "../authentication/utils-authentication.h"
+#include "../authentication/ecdh-authentication.h"
+#include "../authentication/ecdsa-authentication.h"
+#include "../encryption/aes-encryption.h"
+#include "../encryption/utils-encryption.h"
 
 using namespace std;
 
-bool Networking::KeysExchanged(boost::asio::ip::tcp::socket* socket)
+void Networking::SendPTMsg(std::string toSend, boost::asio::ip::tcp::socket* socket)
 {
-    string serverAddress = socket->remote_endpoint().address().to_string();
-    if(HasServerKey(serverAddress))
-    {
-	RSAKeyPair cliKeyPair = RSAEncryption::LoadKeys("./keys/RSA-Private.key",
-	    "RSA-Public.key");
-	RSAKeyPair servKeyPair;
-	string servKeyPath = "./keys/" + serverAddress + "/RSA-Public.key";
-	RSAEncryption::LoadPublicKey(servKeyPair, "./keys/");
-	return KeyCheck(cliKeyPair, servKeyPair, socket);
-    }
-    else
-    {
-	return false;
-    }
+    SendString(toSend, socket);
 }
-bool Networking::HasServerKey(string serverAddress)
+std::string Networking::GetPTMsg(boost::asio::ip::tcp::socket* socket)
 {
-    boost::filesystem::path p("./keys/ " + serverAddress + "/RSA-Public.key");
-    if(boost::filesystem::exists(p) && boost::filesystem::is_regular(p))
-    {
-	return true;
-    }
-    else
-    {
-	return false;
-    }
+    return GetString(socket);
 }
-bool Networking::KeyCheck(RSAKeyPair cliKeyPair, RSAKeyPair srvKeyPair, boost::asio::ip::tcp::socket* socket)
+
+void Networking::SendSignedMsg(std::string toSend, ECDSAKeyPair clientKeyPair, boost::asio::ip::tcp::socket* socket)
 {
-    if(!SendRSAMsg(cliKeyPair, srvKeyPair, "Ping", socket))
-	return false;
-    string reply = GetRSAMsg(cliKeyPair, srvKeyPair, socket);
-    if(reply == "Pong")
+    TimeStampMsg(toSend);
+    SignMsg(clientKeyPair, toSend);
+    SendString(toSend, socket);
+}
+std::string Networking::GetSignedMsg(ECDSAPublicKey publicKey, boost::asio::ip::tcp::socket* socket)
+{
+    string recived = GetString(socket);
+    bool validSig = StripAndValidateSignature(publicKey, recived);
+    bool validTimeStamp = StripAndValidateTimeStamp(recived);
+    if(validSig && validTimeStamp)
     {
-	return true;
+        return recived;
     }
     else
     {
-	return false;
+        throw runtime_error("Could not validate signature or time stamp.");
     }
 }
 
-void Networking::DoKeyExchange(RSAKeyPair& srvKeyPair, boost::asio::ip::tcp::socket* socket)
+void Networking::SendAESMsg(std::string toSend, std::string sessionKey, ECDSAKeyPair clientKeyPair, boost::asio::ip::tcp::socket* socket)
 {
-    RequestServPublicKey(socket);
-    int keyFileSize = GetServPublicKeyHeader(socket);
-    srvKeyPair = GetServPublicKey(keyFileSize, socket);
-    
-    if(!RSAEncryption::ValidatePublicKey(srvKeyPair.PublicKey))
+    TimeStampMsg(toSend);
+    SignMsg(clientKeyPair, toSend);
+    AESEncryptMsg(sessionKey, toSend);
+    SendString(toSend, socket);
+}
+std::string Networking::GetAESMsg(std::string sessionKey, ECDSAPublicKey publicKey, boost::asio::ip::tcp::socket* socket)
+{
+    string recived = GetString(socket);
+    AESDecryptMsg(sessionKey, recived);
+    bool validSig = StripAndValidateSignature(publicKey, recived);
+    bool validTimeStamp = StripAndValidateTimeStamp(recived);
+    if(validSig && validTimeStamp)
     {
-	throw;
-	return;
-    }
-    
-    string keyFileData = LoadPublicKeyFileData();
-    GetRequestForClientPublicKey(socket);
-    SendClientPublicKeyHeader(keyFileData, socket);
-    SendClientPublicKey(keyFileData, socket);
-}
-void Networking::RequestServPublicKey(boost::asio::ip::tcp::socket* socket)
-{
-    size_t length = max_key_request_size;
-    string msg = "REQPK";
-    boost::asio::write(*socket, boost::asio::buffer(msg.c_str(), length));
-}
-int Networking::GetServPublicKeyHeader(boost::asio::ip::tcp::socket* socket)
-{
-    size_t length = max_key_request_size;
-    char headerChar[length];
-    size_t header_length = boost::asio::read(*socket,  boost::asio::buffer(headerChar, length));
-    string headerStr = headerChar;
-    return boost::lexical_cast<int>(headerStr);
-}
-RSAKeyPair Networking::GetServPublicKey(int keyFileSize, boost::asio::ip::tcp::socket* socket)
-{
-    RSAKeyPair servKeyPair;
-    size_t length = keyFileSize;
-    char keyFileChar[length];
-    boost::asio::read(*socket,  boost::asio::buffer(keyFileChar, length));
-    string keyFileStr = keyFileChar;
-    string serverName = socket->remote_endpoint().address().to_string();
-    boost::filesystem::path keyPath("./keys/" + serverName + "/RSA-Public.key");
-    SaveKeyToFile(keyFileStr, serverName);
-    RSAEncryption::LoadPublicKey(servKeyPair, keyPath.relative_path().generic_string());
-    return servKeyPair;
-}
-void Networking::SaveKeyToFile(string keyData, string serverName)
-{
-    boost::filesystem::path keyDir("./keys/" + serverName);
-    if(!boost::filesystem::is_directory(keyDir) && !boost::filesystem::exists(keyDir))
-    {
-	boost::filesystem::create_directory(keyDir);
-    }
-    boost::filesystem::path keyPath("./keys/" + serverName + "/RSA-Public.key");
-    ofstream keyFileStream;
-    keyFileStream.open(keyPath.relative_path().generic_string().c_str());
-    keyFileStream << keyData;
-    keyFileStream.close();
-}
-void Networking::GetRequestForClientPublicKey(boost::asio::ip::tcp::socket* socket)
-{
-    size_t length = max_key_request_size;
-    char requestChar[length];
-    size_t reqestSize = boost::asio::read(*socket,  boost::asio::buffer(requestChar, length));
-    string requestStr = requestChar;
-    if(requestStr == "REQPK")
-    {
-	return;
+        return recived;
     }
     else
     {
-	throw;
+        throw runtime_error("Could not validate signature or time stamp.");
     }
 }
-string Networking::LoadPublicKeyFileData()
+
+
+void Networking::SendString(std::string toSend, boost::asio::ip::tcp::socket* socket)
 {
-    boost::filesystem::path keyFilePath("keys/RSA-Public.key");
-    ifstream keyFileStream(keyFilePath.relative_path().generic_string().c_str(),
-	ios::in|ios::binary|ios::ate
-    );
-    string keyFileData;
-    streampos size;
-    char* memblock;
-    if(keyFileStream.is_open())
-    {
-	size = keyFileStream.tellg();
-	memblock = new char[size];
-	keyFileStream.seekg (0, ios::beg);
-	keyFileStream.read (memblock, size);
-	keyFileStream.close();
-    }
-    keyFileData = memblock;
-    return keyFileData;
+    SendHeader(toSend, socket);
+    SendBody(toSend, socket);
 }
-void Networking::SendClientPublicKeyHeader(string keyFileData, boost::asio::ip::tcp::socket* socket)
+void Networking::SendHeader(std::string toSend, boost::asio::ip::tcp::socket* socket)
 {
-    string headerStr = boost::lexical_cast<string>(keyFileData.size());
+    string header = boost::lexical_cast<string>(toSend.size());
     size_t length = max_header_size;
-    boost::asio::write(*socket, boost::asio::buffer(headerStr.c_str(), length));
+    boost::asio::write(*socket, boost::asio::buffer(header.c_str(), length));
 }
-void Networking::SendClientPublicKey(string keyFileData, boost::asio::ip::tcp::socket* socket)
+void Networking::SendBody(std::string toSend, boost::asio::ip::tcp::socket* socket)
 {
-    size_t length = keyFileData.size();
-    boost::asio::write(*socket, boost::asio::buffer(keyFileData.c_str(), length));
-}
-
-
-bool Networking::SendRSAMsg(RSAKeyPair cliKeyPair,
-                            RSAKeyPair srvKeyPair,
-                            std::string toSend,
-                            boost::asio::ip::tcp::socket *socket)
-{
-    string DateTimeString = MakeDateTimeStamp();
-    toSend = DateTimeString + "\n" + toSend;
-    string signature = RSAEncryption::SignString(cliKeyPair, toSend);
-    toSend = RSAEncryption::RSAEncrypt(srvKeyPair, toSend);
-    try
-    {
-        MsgHeader header;
-        header.MsgSize = toSend.length();
-        header.SignatureSize = signature.length();
-        SendHeader(header, socket);
-        SendCTMsg(toSend, socket);
-        SendMsgSignature(signature, socket);
-        return true;
-    }
-    catch(std::exception &e)
-    {
-        cout << "Failed to send message to the server: " << e.what() << endl;
-        return false;
-    }
+    size_t length = toSend.size();
+    boost::asio::write(*socket, boost::asio::buffer(toSend.c_str(), length));
 }
 
-std::string Networking::GetRSAMsg(RSAKeyPair cliKeyPair, RSAKeyPair srvKeyPair, boost::asio::ip::tcp::socket *socket)
+std::string Networking::GetString(boost::asio::ip::tcp::socket* socket)
 {
-    try
-    {
-        MsgHeader header = GetHeader(socket);
-        string msgCT = GetCTMsg(header, socket);
-        string signature = GetMsgSignature(header, socket);
-        string msgPT = RSAEncryption::RSADecrypt(cliKeyPair, msgCT);
-        bool isValidSig = RSAEncryption::VerifySignature(srvKeyPair, msgPT, signature);
-        bool isValidTimeStamp = ValidTimeStamp(msgPT);
-        if(isValidSig && isValidTimeStamp)
-        {
-            return msgPT;
-        }
-        else
-        {
-            cout << "Could no verify message from server" << endl;
-            return "";
-        }
-    }
-    catch(std::exception &e)
-    {
-        cout << "Error fetching response from server: " << e.what() << endl;
-        return "";
-    }
+    int bodySize = GetHeader(socket);
+    return GetBody(bodySize, socket);
+}
+int Networking::GetHeader(boost::asio::ip::tcp::socket* socket)
+{
+    size_t length = max_header_size;
+    char headerChar[length];
+    boost::asio::read(*socket,  boost::asio::buffer(headerChar, length));
+    string header = headerChar;
+    return boost::lexical_cast<int>(header);
+}
+std::string Networking::GetBody(int bodySize, boost::asio::ip::tcp::socket* socket)
+{
+    size_t length = bodySize;
+    char bodyChar[length];
+    boost::asio::read(*socket,  boost::asio::buffer(bodyChar, length));
+    string body = bodyChar;
+    return body;
 }
 
-string Networking::MakeDateTimeStamp()
+void Networking::TimeStampMsg(string& input)
 {
-    boost::posix_time::ptime now = boost::posix_time::second_clock::universal_time();
-    return to_iso_string(now);
+    string timeStamp = UtilsAuthentication::MakeDateTimeStamp();
+    input = timeStamp + "\n" + input;
 }
-bool Networking::ValidTimeStamp(string msg)
+bool Networking::StripAndValidateTimeStamp(string& input)
 {
+    string timeStamp;
+    stringstream msgReader(input);
+    getline(msgReader, timeStamp);
+    bool validTimeStamp = UtilsAuthentication::ValidTimeStamp(timeStamp);
     string line;
-    istringstream msgReader(msg);
-    getline(msgReader, line);
-    boost::posix_time::ptime timeStamp(boost::posix_time::from_iso_string(line));
-    boost::posix_time::ptime now = boost::posix_time::second_clock::universal_time();
-    boost::posix_time::time_duration td = now - timeStamp;
-    if(td.seconds() <= 15 && 
-       td.minutes() == 0 && td.hours() == 0 &&
-       timeStamp.date() == now.date())
+    string stripedInput = "";
+    getline(msgReader, stripedInput);
+    while(getline(msgReader, line))
     {
-        return true;
+        stripedInput += "\n" + line;
     }
-    else
-    {
-        return false;
-    }
+    input = stripedInput;
+    return validTimeStamp;
 }
 
-void Networking::SendHeader(MsgHeader header, boost::asio::ip::tcp::socket* socket)
+void Networking::SignMsg(ECDSAKeyPair keyPair, string& input)
 {
-    string headerStr = header.MsgSize + ":" + header.SignatureSize;
-    size_t length = max_header_size;
-    boost::asio::write(*socket, boost::asio::buffer(headerStr.c_str(), length));
+    string signature = ECDSAAuthentication::SignString(input, keyPair);
+    input = signature + "\n" + input;
 }
-void Networking::SendCTMsg(string msg, boost::asio::ip::tcp::socket *socket)
+bool Networking::StripAndValidateSignature(ECDSAPublicKey publicKey, string& input)
 {
-    size_t length = msg.size();
-    boost::asio::write(*socket, boost::asio::buffer(msg.c_str(), length));
-}
-void Networking::SendMsgSignature(string signature, boost::asio::ip::tcp::socket *socket)
-{
-    size_t length = signature.size();
-    boost::asio::write(*socket, boost::asio::buffer(signature.c_str(), length));
+    string signature;
+    istringstream msgReader(input);
+    getline(msgReader, signature);
+    string line;
+    string stripedInput = "";
+    getline(msgReader, stripedInput);
+    while(getline(msgReader, line))
+    {
+        stripedInput += "\n" + line;
+    }
+    bool validSignature = ECDSAAuthentication::SignatureValid(signature, stripedInput, publicKey);
+    input = stripedInput;
+    return validSignature;
 }
 
-MsgHeader Networking::GetHeader(boost::asio::ip::tcp::socket* socket)
+void Networking::AESEncryptMsg(string sessionKey, string& input)
 {
-    MsgHeader header;
-    size_t length = max_header_size;
-    char headerChar[length];
-    size_t header_length = boost::asio::read(*socket,  boost::asio::buffer(headerChar, length));
-    string headerStr = headerChar;
-    vector<string> headerVals;
-    boost::split(headerVals, headerStr, boost::is_any_of(":"));
-    header.MsgSize = boost::lexical_cast<int>(headerVals[0]);
-    header.SignatureSize = boost::lexical_cast<int>(headerVals[1]);
-    return header;
+    input = AESEncryptor::Encrypt(input, sessionKey);
 }
-string Networking::GetCTMsg(MsgHeader header, boost::asio::ip::tcp::socket *socket)
+void Networking::AESDecryptMsg(string sessionKey, string& input)
 {
-    size_t length = header.MsgSize;
-    char msgChar[length];
-    size_t msg_length = boost::asio::read(*socket,  boost::asio::buffer(msgChar, length));
-    string msg = msgChar;
-    return msg;
-}
-string Networking::GetMsgSignature(MsgHeader header, boost::asio::ip::tcp::socket *socket)
-{
-    size_t length = header.SignatureSize;
-    char sigChar[length];
-    size_t sig_length = boost::asio::read(*socket,  boost::asio::buffer(sigChar, length));
-    string sig = sigChar;
-    return sig;
+    input = AESEncryptor::Decrypt(input, sessionKey);
 }
 

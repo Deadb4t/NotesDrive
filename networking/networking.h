@@ -22,63 +22,53 @@
 
 #include <string>
 
-#include "../encryption/rsa-encryption.h"
 #include <boost/asio/ip/tcp.hpp>
 
-struct MsgHeader
-{
-    int MsgSize;
-    int SignatureSize;
-};
+#include "../authentication/ecdsa-authentication.h"
 
 class Networking
-{    
+{
     enum {max_header_size = 256};
-    enum {max_key_request_size = 128};
     
-    public:
-        static bool KeysExchanged(boost::asio::ip::tcp::socket *socket);
+    public:        
+        static void SendPTMsg(std::string toSend, 
+                              boost::asio::ip::tcp::socket* socket);
+        static std::string GetPTMsg(boost::asio::ip::tcp::socket* socket);
         
-        static void DoKeyExchange(RSAKeyPair &srvKeyPair,
-                                  boost::asio::ip::tcp::socket *socket);
+        static ECDSAPublicKey GetPublicKey(boost::asio::ip::tcp::socket* socket);
         
-        static bool SendRSAMsg(RSAKeyPair cliKeyPair,
-                                    RSAKeyPair srvKeyPair,
-                                    std::string toSend,
-                                    boost::asio::ip::tcp::socket *socket);
-
-        static std::string GetRSAMsg(RSAKeyPair cliKeyPair,
-                                     RSAKeyPair srvKeyPair,
-                                     boost::asio::ip::tcp::socket *socket);
+        static void SendSignedMsg(std::string toSend,
+                                     ECDSAKeyPair clientKeyPair,
+                                     boost::asio::ip::tcp::socket* socket);
+        static std::string GetSignedMsg(ECDSAPublicKey publicKey, boost::asio::ip::tcp::socket* socket);
+        
+        static void SendAESMsg(std::string toSend,
+                               std::string sessionKey,
+                               ECDSAKeyPair clientKeyPair,
+                               boost::asio::ip::tcp::socket* socket);
+        static std::string GetAESMsg(std::string sessionKey, ECDSAPublicKey publicKey, boost::asio::ip::tcp::socket* socket);
         
     private:
-        static bool HasServerKey(std::string serverAddress);
-        static bool KeyCheck(RSAKeyPair cliKeyPair,
-                             RSAKeyPair srvKeyPair,
-                             boost::asio::ip::tcp::socket *socket);
+        static void SendString(std::string toSend, 
+                              boost::asio::ip::tcp::socket* socket);
+        static void SendHeader(std::string toSend, 
+                              boost::asio::ip::tcp::socket* socket);
+        static void SendBody(std::string toSend, 
+                              boost::asio::ip::tcp::socket* socket);
         
-        static void RequestServPublicKey(boost::asio::ip::tcp::socket *socket);
-        static int GetServPublicKeyHeader(boost::asio::ip::tcp::socket *socket);
-        static RSAKeyPair GetServPublicKey(int keyFileSize, boost::asio::ip::tcp::socket *socket);
-	static void SaveKeyToFile(std::string keyData, std::string serverName);
+        static std::string GetString(boost::asio::ip::tcp::socket* socket);
+        static int GetHeader(boost::asio::ip::tcp::socket* socket);
+        static std::string GetBody(int bodySize,
+                                   boost::asio::ip::tcp::socket* socket);
         
-        static void GetRequestForClientPublicKey(boost::asio::ip::tcp::socket *socket);
-        static std::string LoadPublicKeyFileData();
-        static void SendClientPublicKeyHeader(std::string keyFileData, boost::asio::ip::tcp::socket *socket);
-        static void SendClientPublicKey(std::string keyFileData, boost::asio::ip::tcp::socket *socket);
+        static void TimeStampMsg(std::string &input);
+        static bool StripAndValidateTimeStamp(std::string &input);
         
-        static std::string MakeDateTimeStamp();
-        static bool ValidTimeStamp(std::string msg);
+        static void SignMsg(ECDSAKeyPair keyPair, std::string &input);
+        static bool StripAndValidateSignature(ECDSAPublicKey publicKey, std::string& input);
         
-        static void SendHeader(MsgHeader header, boost::asio::ip::tcp::socket *socket);
-        static void SendCTMsg(std::string msg, boost::asio::ip::tcp::socket *socket);
-        static void SendMsgSignature(std::string signature, boost::asio::ip::tcp::socket *socket);
-        
-        static MsgHeader GetHeader(boost::asio::ip::tcp::socket *socket);
-        static std::string GetCTMsg(MsgHeader header, boost::asio::ip::tcp::socket *socket);
-        static std::string GetMsgSignature(MsgHeader header, boost::asio::ip::tcp::socket *socket);
-        
-        
+        static void AESEncryptMsg(std::string sessionKey, std::string &input);
+        static void AESDecryptMsg(std::string sessionKey, std::string &input);
 };
 
 #endif // NETWORKING_H

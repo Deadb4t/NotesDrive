@@ -18,6 +18,7 @@
  */
 
 #include "rsa-encryption.h"
+#include "utils-encryption.h"
 
 #include <string>
 #include <iostream>
@@ -64,12 +65,14 @@ string RSAEncryption::SignString(RSAKeyPair keyPair, std::string plainText)
             new StringSink(signature)
         )
     );
+    signature = UtilsEncryption::EncodeToHex(signature);
     return signature;
 }
 
 bool RSAEncryption::VerifySignature(RSAKeyPair keyPair, string plainText, string signature)
 {
     string recovered;
+    signature = UtilsEncryption::DecodeFromHex(signature);
     RSASS<PSS, SHA3_512>::Verifier verifier(keyPair.PublicKey);
     try
     {
